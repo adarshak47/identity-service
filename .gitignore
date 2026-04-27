@@ -1,0 +1,78 @@
+# =========================
+# Java / Maven
+# =========================
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Maven wrapper logs
+.mvn/wrapper/maven-wrapper.jar
+
+# =========================
+# IDE - IntelliJ
+# =========================
+.idea/
+*.iml
+out/
+
+# =========================
+# Eclipse
+# =========================
+.project
+.classpath
+.settings/
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+
+# =========================
+# Spring Boot
+# =========================
+/spring.log
+
+# =========================
+# Environment / Secrets
+# NEVER COMMIT SECRETS
+# =========================
+.env
+.env.*
+application-local.yml
+application-local.yaml
+application-dev.yml
+application-dev.yaml
+*.pem
+*.key
+secrets/
+
+# =========================
+# Docker local volumes
+# =========================
+postgres-data/
+redis-data/
+
+# =========================
+# Test artifacts
+# =========================
+coverage/
+*.exec
+
+# =========================
+# Generated files
+# =========================
+generated/
