@@ -1,21 +1,19 @@
 package com.adarsh.identity_service.auth.domain;
 
-import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import static lombok.AccessLevel.PROTECTED;
-
-
 @Getter
-@NoArgsConstructor(access = PROTECTED)
 @Entity
 @Table(name="users")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UserAccount {
 
     @Id
@@ -31,7 +29,7 @@ public class UserAccount {
     private UserStatus status;
 
     @CreationTimestamp
-    @Column(name="created_at", updatable=false)
+    @Column(name="created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @UpdateTimestamp

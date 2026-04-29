@@ -1,0 +1,28 @@
+package com.adarsh.identity_service.auth.controller;
+
+import com.adarsh.identity_service.auth.dto.RegisterRequest;
+import com.adarsh.identity_service.auth.dto.RegisterResponse;
+import com.adarsh.identity_service.auth.service.AuthenticationService;
+
+import lombok.RequiredArgsConstructor;
+
+import jakarta.validation.Valid;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthenticationService authenticationService;
+
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public RegisterResponse register(
+        @Valid @RequestBody RegisterRequest request
+    ) {
+        return authenticationService.registerUser(request);
+    }
+}
