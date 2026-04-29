@@ -1,5 +1,7 @@
 package com.adarsh.identity_service.auth.controller;
 
+import com.adarsh.identity_service.auth.dto.LoginRequest;
+import com.adarsh.identity_service.auth.dto.LoginResponse;
 import com.adarsh.identity_service.auth.dto.RegisterRequest;
 import com.adarsh.identity_service.auth.dto.RegisterResponse;
 import com.adarsh.identity_service.auth.service.AuthenticationService;
@@ -24,5 +26,12 @@ public class AuthController {
         @Valid @RequestBody RegisterRequest request
     ) {
         return authenticationService.registerUser(request);
+    }
+
+    @PostMapping("/login")
+    public LoginResponse login(
+        @Valid @RequestBody LoginRequest request
+    ){
+        return authenticationService.login(request);
     }
 }
