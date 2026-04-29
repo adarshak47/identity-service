@@ -1,18 +1,29 @@
 package com.adarsh.identity_service.config;
 
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import com.adarsh.identity_service.security.jwt.
+    JwtAuthenticationFilter;
 
-import org.springframework.security.config.Customizer;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.context.annotation.*;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+
+import org.springframework.security.crypto.bcrypt.
+    BCryptPasswordEncoder;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtFilter;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -24,19 +35,36 @@ public class SecurityConfig {
 
         return http
             .csrf(csrf -> csrf.disable())
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/v1/auth/**"
-                ).permitAll()
 
-                .requestMatchers(
-                    "/actuator/health"
-                ).permitAll()
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(
+                    SessionCreationPolicy.STATELESS
+                )
+            )
+
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(
+                    (request,response,e) ->
+                        response.sendError(
+                            HttpServletResponse.SC_UNAUTHORIZED,
+                            "Unauthorized"
+                        )
+                )
+            )
+
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/v1/auth/**")
+                .permitAll()
 
                 .anyRequest()
                 .authenticated()
             )
-            .httpBasic(Customizer.withDefaults())
+
+            .addFilterBefore(
+                jwtFilter,
+                UsernamePasswordAuthenticationFilter.class
+            )
+
             .build();
     }
 }
