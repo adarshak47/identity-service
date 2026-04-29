@@ -36,12 +36,7 @@ public class UserAccount {
     @Column(name="updated_at")
     private LocalDateTime updatedAt;
 
-    public UserAccount(
-        UUID id,
-        String email,
-        String passwordHash,
-        UserStatus status
-    ){
+    public UserAccount(UUID id, String email, String passwordHash, UserStatus status){
         this.id=id;
         this.email=email;
         this.passwordHash=passwordHash;

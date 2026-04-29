@@ -1,9 +1,6 @@
 package com.adarsh.identity_service.auth.controller;
 
-import com.adarsh.identity_service.auth.dto.LoginRequest;
-import com.adarsh.identity_service.auth.dto.LoginResponse;
-import com.adarsh.identity_service.auth.dto.RegisterRequest;
-import com.adarsh.identity_service.auth.dto.RegisterResponse;
+import com.adarsh.identity_service.auth.dto.*;
 import com.adarsh.identity_service.auth.service.AuthenticationService;
 
 import lombok.RequiredArgsConstructor;
@@ -33,5 +30,20 @@ public class AuthController {
         @Valid @RequestBody LoginRequest request
     ){
         return authenticationService.login(request);
+    }
+
+    @PostMapping("/refresh")
+    public LoginResponse refresh(
+        @RequestBody @Valid RefreshRequest request
+    ){
+        return authenticationService.refreshToken(request);
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(
+        @Valid @RequestBody LogoutRequest request
+    ){
+        authenticationService.logout(request);
     }
 }
