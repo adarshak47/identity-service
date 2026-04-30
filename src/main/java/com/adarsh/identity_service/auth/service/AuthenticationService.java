@@ -12,6 +12,7 @@ import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
 import com.adarsh.identity_service.auth.repository.RefreshTokenRepository;
 import com.adarsh.identity_service.auth.repository.RoleRepository;
 import com.adarsh.identity_service.auth.repository.UserAccountRepository;
+import com.adarsh.identity_service.common.security.TokenHashUtil;
 import com.adarsh.identity_service.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 
@@ -58,13 +59,13 @@ public class AuthenticationService {
 
         RefreshToken refreshToken = refreshTokenService.create(user);
 
-        return new LoginResponse(accessToken, refreshToken.getToken(), "Bearer");
+        return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
     }
 
     public LoginResponse refreshToken(RefreshRequest request) {
 
-        RefreshToken existingToken = refreshTokenRepository.findByToken(request.refreshToken()).orElseThrow(InvalidCredentialsException::new);
-
+        String tokenHash = TokenHashUtil.hash(request.refreshToken());
+        RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash).orElseThrow(InvalidCredentialsException::new);
         if (existingToken.isRevoked() || existingToken.isExpired()) {
             throw new InvalidCredentialsException();
         }
@@ -80,13 +81,18 @@ public class AuthenticationService {
 
         RefreshToken newRefreshToken = refreshTokenService.create(user);
 
-        return new LoginResponse(newAccessToken, newRefreshToken.getToken(), "Bearer");
+        return new LoginResponse(newAccessToken, newRefreshToken.getRawToken(), "Bearer");
     }
 
-    public void logout(LogoutRequest request){
+    public void logout(LogoutRequest request) {
+        String tokenHash = TokenHashUtil.hash(request.refreshToken());
 
-        RefreshToken token = refreshTokenRepository.findByToken(request.refreshToken()).orElseThrow(InvalidCredentialsException::new);
-        token.revoke();
-        refreshTokenRepository.save(token);
+        refreshTokenRepository.findByTokenHash(tokenHash).ifPresent(token -> {
+            if (!token.isRevoked() && !token.isExpired()) {
+                token.revoke();
+                refreshTokenRepository.save(token);
+            }
+        });
     }
+
 }
