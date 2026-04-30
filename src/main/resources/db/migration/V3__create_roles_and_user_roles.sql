@@ -17,6 +17,7 @@ CREATE TABLE user_roles (
             REFERENCES roles(id)
 );
 
+-- Seed roles
 INSERT INTO roles (id, name) VALUES
     (gen_random_uuid(), 'USER'),
     (gen_random_uuid(), 'ADMIN');
