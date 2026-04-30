@@ -2,10 +2,7 @@ package com.adarsh.identity_service.auth.service;
 
 
 
-import com.adarsh.identity_service.auth.domain.RefreshToken;
-import com.adarsh.identity_service.auth.domain.Role;
-import com.adarsh.identity_service.auth.domain.UserAccount;
-import com.adarsh.identity_service.auth.domain.UserStatus;
+import com.adarsh.identity_service.auth.domain.*;
 import com.adarsh.identity_service.auth.dto.*;
 import com.adarsh.identity_service.auth.exception.EmailAlreadyExistsException;
 import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
@@ -55,7 +52,19 @@ public class AuthenticationService {
             throw new InvalidCredentialsException();
         }
         List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-        String accessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles);
+        List<String> permissions = user.getRoles()
+            .stream()
+            .flatMap(role -> role.getPermissions().stream())
+            .map(Permission::getName)
+            .distinct()
+            .toList();
+
+        String accessToken = jwtTokenProvider.generateToken(
+            user.getId().toString(),
+            user.getEmail(),
+            roles,
+            permissions
+        );
 
         RefreshToken refreshToken = refreshTokenService.create(user);
 
@@ -77,8 +86,19 @@ public class AuthenticationService {
         UserAccount user = existingToken.getUser();
 
         List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-        String newAccessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles);
+        List<String> permissions = user.getRoles()
+            .stream()
+            .flatMap(role -> role.getPermissions().stream())
+            .map(Permission::getName)
+            .distinct()
+            .toList();
 
+        String newAccessToken = jwtTokenProvider.generateToken(
+            user.getId().toString(),
+            user.getEmail(),
+            roles,
+            permissions
+        );
         RefreshToken newRefreshToken = refreshTokenService.create(user);
 
         return new LoginResponse(newAccessToken, newRefreshToken.getRawToken(), "Bearer");

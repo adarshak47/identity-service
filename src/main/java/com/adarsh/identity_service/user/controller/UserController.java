@@ -20,11 +20,9 @@ public class UserController {
         );
     }
 
+    @PreAuthorize("hasAuthority('READ_USER')")
     @GetMapping("/admin")
-    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<AdminResponse> adminOnly() {
-        return ApiResponse.success(
-            new AdminResponse("Admin access granted")
-        );
+        return ApiResponse.success(new AdminResponse("Admin access granted"));
     }
 }
