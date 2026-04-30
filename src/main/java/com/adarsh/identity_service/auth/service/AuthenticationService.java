@@ -3,12 +3,14 @@ package com.adarsh.identity_service.auth.service;
 
 
 import com.adarsh.identity_service.auth.domain.RefreshToken;
+import com.adarsh.identity_service.auth.domain.Role;
 import com.adarsh.identity_service.auth.domain.UserAccount;
 import com.adarsh.identity_service.auth.domain.UserStatus;
 import com.adarsh.identity_service.auth.dto.*;
 import com.adarsh.identity_service.auth.exception.EmailAlreadyExistsException;
 import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
 import com.adarsh.identity_service.auth.repository.RefreshTokenRepository;
+import com.adarsh.identity_service.auth.repository.RoleRepository;
 import com.adarsh.identity_service.auth.repository.UserAccountRepository;
 import com.adarsh.identity_service.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -28,6 +31,7 @@ public class AuthenticationService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final RoleRepository roleRepository;
 
     public RegisterResponse registerUser(RegisterRequest request) {
 
@@ -35,6 +39,9 @@ public class AuthenticationService {
             throw new EmailAlreadyExistsException(request.email());
         }
         UserAccount user = new UserAccount(UUID.randomUUID(), request.email(), passwordEncoder.encode(request.password()), UserStatus.ACTIVE);
+        Role userRole = roleRepository.findByName("USER").orElseThrow();
+
+        user.addRole(userRole);
         UserAccount savedUser = repository.save(user);
         return new RegisterResponse(savedUser.getId(), savedUser.getEmail(), "User registered successfully");
     }
@@ -46,8 +53,8 @@ public class AuthenticationService {
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new InvalidCredentialsException();
         }
-
-        String accessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail());
+        List<String> roles = user.getRoles().stream().map(Role::getName).toList();
+        String accessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles);
 
         RefreshToken refreshToken = refreshTokenService.create(user);
 
@@ -68,7 +75,8 @@ public class AuthenticationService {
 
         UserAccount user = existingToken.getUser();
 
-        String newAccessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail());
+        List<String> roles = user.getRoles().stream().map(Role::getName).toList();
+        String newAccessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles);
 
         RefreshToken newRefreshToken = refreshTokenService.create(user);
 
