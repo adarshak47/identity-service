@@ -7,6 +7,7 @@ import com.adarsh.identity_service.common.security.TokenHashUtil;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -20,11 +21,14 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository repository;
 
+    @Value("${security.jwt.refresh-token-expiration}")
+    private long refreshTokenExpiration;
+
     public RefreshToken create(UserAccount user) {
         String rawToken = generateSecureToken();
         String tokenHash = TokenHashUtil.hash(rawToken);
 
-        RefreshToken token = new RefreshToken(UUID.randomUUID(), tokenHash, user, LocalDateTime.now().plusDays(7), false);
+        RefreshToken token = new RefreshToken(UUID.randomUUID(), tokenHash, user, LocalDateTime.now().plusSeconds(refreshTokenExpiration), false);
 
         repository.save(token);
 
