@@ -1,0 +1,29 @@
+server:
+    port: 8080
+
+spring:
+    application:
+        name: identity-service
+
+    datasource:
+        url: jdbc:postgresql://localhost:5432/identity_db
+        username: postgres
+        password: Password@2019
+
+    jpa:
+        hibernate:
+            ddl-auto: validate
+
+    flyway:
+        enabled: true
+
+management:
+    endpoints:
+        web:
+            exposure:
+                include: health,info
+
+security:
+    jwt:
+        secret: myVeryStrongSecretKeyForDevelopmentOnly12345
+        access-token-expiration: 900000
