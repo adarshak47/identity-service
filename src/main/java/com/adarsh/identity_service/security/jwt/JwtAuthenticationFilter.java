@@ -25,10 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider tokenProvider;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain)
-        throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 
         String header = request.getHeader("Authorization");
 
@@ -38,11 +35,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (tokenProvider.validateToken(token)) {
 
-                Claims claims = Jwts.parserBuilder()
-                    .setSigningKey(tokenProvider.getSecretKey())
-                    .build()
-                    .parseClaimsJws(token)
-                    .getBody();
+                Claims claims = Jwts.parserBuilder().setSigningKey(tokenProvider.getSecretKey()).build().parseClaimsJws(token).getBody();
 
                 String userId = claims.getSubject();
 
@@ -53,28 +46,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 // Roles
                 if (roles != null) {
-                    roles.forEach(role ->
-                        authorities.add(
-                            new SimpleGrantedAuthority("ROLE_" + role)
-                        )
-                    );
+                    roles.forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
                 }
 
                 // Permissions
                 if (permissions != null) {
-                    permissions.forEach(permission ->
-                        authorities.add(
-                            new SimpleGrantedAuthority(permission)
-                        )
-                    );
+                    permissions.forEach(permission -> authorities.add(new SimpleGrantedAuthority(permission)));
                 }
 
-                UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                        userId,
-                        null,
-                        authorities
-                    );
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }

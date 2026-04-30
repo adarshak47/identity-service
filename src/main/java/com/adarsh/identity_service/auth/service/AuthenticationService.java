@@ -4,19 +4,24 @@ package com.adarsh.identity_service.auth.service;
 
 import com.adarsh.identity_service.auth.domain.*;
 import com.adarsh.identity_service.auth.dto.*;
+import com.adarsh.identity_service.auth.exception.AccountLockedException;
 import com.adarsh.identity_service.auth.exception.EmailAlreadyExistsException;
 import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
+import com.adarsh.identity_service.auth.exception.RateLimitExceededException;
 import com.adarsh.identity_service.auth.repository.RefreshTokenRepository;
 import com.adarsh.identity_service.auth.repository.RoleRepository;
 import com.adarsh.identity_service.auth.repository.UserAccountRepository;
 import com.adarsh.identity_service.common.security.TokenHashUtil;
+import com.adarsh.identity_service.common.util.InputNormalizer;
+import com.adarsh.identity_service.common.web.RequestContext;
 import com.adarsh.identity_service.security.jwt.JwtTokenProvider;
+import com.adarsh.identity_service.security.ratelimit.RateLimiterService;
+import com.adarsh.identity_service.user.dto.SessionResponse;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,13 +35,16 @@ public class AuthenticationService {
     private final RefreshTokenService refreshTokenService;
     private final RefreshTokenRepository refreshTokenRepository;
     private final RoleRepository roleRepository;
+    private final RequestContext requestContext;
+    private final RateLimiterService rateLimiterService;
 
     public RegisterResponse registerUser(RegisterRequest request) {
 
-        if(repository.existsByEmail(request.email())) {
-            throw new EmailAlreadyExistsException(request.email());
+        String email = InputNormalizer.normalizeEmail(request.email());
+        if(repository.existsByEmail(email)) {
+            throw new EmailAlreadyExistsException(email);
         }
-        UserAccount user = new UserAccount(UUID.randomUUID(), request.email(), passwordEncoder.encode(request.password()), UserStatus.ACTIVE);
+        UserAccount user = new UserAccount(UUID.randomUUID(), email, passwordEncoder.encode(request.password()), UserStatus.ACTIVE);
         Role userRole = roleRepository.findByName("USER").orElseThrow();
 
         user.addRole(userRole);
@@ -46,15 +54,42 @@ public class AuthenticationService {
 
     public LoginResponse login(LoginRequest request) {
 
-        UserAccount user = repository.findByEmail(request.email()).orElseThrow(InvalidCredentialsException::new);
+        String email = InputNormalizer.normalizeEmail(request.email());
 
+        String rateLimitKey = requestContext.getClientIp() + ":" + email;
+
+        if (!rateLimiterService.isAllowed(rateLimitKey)) {
+            throw new RateLimitExceededException("Too many login attempts");
+        }
+
+        UserAccount user = repository.findByEmail(email)
+            .orElseThrow(InvalidCredentialsException::new);
+
+        // 🔐 CHECK ACCOUNT LOCK
+        if (user.isAccountLocked()) {
+            throw new AccountLockedException();
+        }
+
+        // ❌ WRONG PASSWORD
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+
+            user.incrementFailedAttempts(2, 1); // 5 attempts → lock 10 min
+            repository.save(user);
+
             throw new InvalidCredentialsException();
         }
+
+        // ✅ SUCCESS
+        user.resetFailedAttempts();
+        repository.save(user);
+
+        rateLimiterService.reset(rateLimitKey);
+
         List<String> roles = user.getRoles().stream().map(Role::getName).toList();
+
         List<String> permissions = user.getRoles()
             .stream()
-            .flatMap(role -> role.getPermissions().stream())
+            .flatMap(r -> r.getPermissions().stream())
             .map(Permission::getName)
             .distinct()
             .toList();
@@ -66,12 +101,15 @@ public class AuthenticationService {
             permissions
         );
 
-        RefreshToken refreshToken = refreshTokenService.create(user);
+        RefreshToken refreshToken = refreshTokenService.create(
+            user,
+            request.deviceName(),
+            requestContext.getClientIp(),
+            requestContext.getUserAgent()
+        );
 
         return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
-    }
-
-    public LoginResponse refreshToken(RefreshRequest request) {
+    }    public LoginResponse refreshToken(RefreshRequest request) {
 
         String tokenHash = TokenHashUtil.hash(request.refreshToken());
         RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash).orElseThrow(InvalidCredentialsException::new);
@@ -99,7 +137,12 @@ public class AuthenticationService {
             roles,
             permissions
         );
-        RefreshToken newRefreshToken = refreshTokenService.create(user);
+        RefreshToken newRefreshToken = refreshTokenService.create(
+            user,
+            existingToken.getDeviceName(),
+            existingToken.getIpAddress(),
+            existingToken.getUserAgent()
+        );
 
         return new LoginResponse(newAccessToken, newRefreshToken.getRawToken(), "Bearer");
     }
@@ -113,6 +156,22 @@ public class AuthenticationService {
                 refreshTokenRepository.save(token);
             }
         });
+    }
+
+    public List<SessionResponse> getUserSessions(String userId) {
+
+        UserAccount user = repository.findById(UUID.fromString(userId))
+            .orElseThrow(() -> new InvalidCredentialsException());
+
+        return refreshTokenRepository.findByUser(user)
+            .stream()
+            .map(token -> new SessionResponse(
+                token.getDeviceName(),
+                token.getIpAddress(),
+                token.getUserAgent(),
+                token.isRevoked()
+            ))
+            .toList();
     }
 
 }

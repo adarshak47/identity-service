@@ -1,8 +1,10 @@
 package com.adarsh.identity_service.common;
 
+import com.adarsh.identity_service.auth.exception.AccountLockedException;
 import com.adarsh.identity_service.auth.exception.EmailAlreadyExistsException;
 
 import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
+import com.adarsh.identity_service.auth.exception.RateLimitExceededException;
 import com.adarsh.identity_service.common.response.ApiResponse;
 import com.adarsh.identity_service.common.response.ErrorResponse;
 import com.adarsh.identity_service.common.response.FieldError;
@@ -51,5 +53,19 @@ public class GlobalExceptionHandler {
         ErrorResponse error = new ErrorResponse("INTERNAL_SERVER_ERROR", "Something went wrong");
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.failure(error));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRateLimit(RateLimitExceededException ex) {
+        ErrorResponse error = new ErrorResponse("RATE_LIMIT_EXCEEDED", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(ApiResponse.failure(error));
+    }
+
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountLocked(AccountLockedException ex) {
+        return ResponseEntity.status(HttpStatus.LOCKED)
+            .body(ApiResponse.failure(
+                new ErrorResponse("ACCOUNT_LOCKED", ex.getMessage())
+            ));
     }
 }

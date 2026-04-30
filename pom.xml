@@ -6,7 +6,6 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <!-- CHANGED: downgraded from 4.0.6 to 3.3.5 for springdoc compatibility -->
         <version>3.3.5</version>
         <relativePath/>
     </parent>

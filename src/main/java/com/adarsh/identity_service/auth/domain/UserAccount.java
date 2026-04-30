@@ -46,6 +46,12 @@ public class UserAccount {
     )
     private Set<Role> roles = new HashSet<>();
 
+    @Column(name = "failed_attempts")
+    private int failedAttempts;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
     public UserAccount(UUID id, String email, String passwordHash, UserStatus status){
         this.id=id;
         this.email=email;
@@ -55,5 +61,23 @@ public class UserAccount {
 
     public void addRole(Role role){
         this.roles.add(role);
+    }
+
+    public void incrementFailedAttempts(int maxAttempts, int lockMinutes) {
+        this.failedAttempts++;
+
+        if (this.failedAttempts >= maxAttempts) {
+            this.lockedUntil = LocalDateTime.now().plusMinutes(lockMinutes);
+        }
+    }
+
+    public void resetFailedAttempts() {
+        this.failedAttempts = 0;
+        this.lockedUntil = null;
+    }
+
+    public boolean isAccountLocked() {
+        return this.lockedUntil != null &&
+            this.lockedUntil.isAfter(LocalDateTime.now());
     }
 }
