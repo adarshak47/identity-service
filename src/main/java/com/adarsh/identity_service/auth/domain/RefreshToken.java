@@ -1,7 +1,6 @@
 package com.adarsh.identity_service.auth.domain;
 
 import jakarta.persistence.*;
-
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,16 +33,28 @@ public class RefreshToken {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "device_name")
+    private String deviceName;
+
+    @Column(name = "ip_address")
+    private String ipAddress;
+
+    @Column(name = "user_agent")
+    private String userAgent;
+
     @Transient
     private String rawToken;
 
-    public RefreshToken(UUID id, String tokenHash, UserAccount user, LocalDateTime expiryDate, boolean revoked) {
+    public RefreshToken(UUID id, String tokenHash, UserAccount user, LocalDateTime expiryDate, boolean revoked, String deviceName, String ipAddress, String userAgent) {
         this.id = id;
         this.tokenHash = tokenHash;
         this.user = user;
         this.expiryDate = expiryDate;
         this.revoked = revoked;
         this.createdAt = LocalDateTime.now();
+        this.deviceName = deviceName;
+        this.ipAddress = ipAddress;
+        this.userAgent = userAgent;
     }
 
     public void revoke() {
