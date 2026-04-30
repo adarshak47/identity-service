@@ -44,16 +44,16 @@ class AuthenticationServiceTest {
     void shouldLoginSuccessfully() {
         UserAccount user = new UserAccount(UUID.randomUUID(), "test@mail.com", "encoded", null);
 
-        RefreshToken mockRefreshToken = new RefreshToken(UUID.randomUUID(), "hash", user, null, false);
+        RefreshToken mockRefreshToken = new RefreshToken(UUID.randomUUID(), "hash", user, null, false, null, null, null);
         mockRefreshToken.setRawToken("refresh-token");
 
         when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("password", "encoded")).thenReturn(true);
-        when(jwtTokenProvider.generateToken(any(), any(), any())).thenReturn("access-token");
+        when(jwtTokenProvider.generateToken(any(), any(), any(), any())).thenReturn("access-token");
 
-        when(refreshTokenService.create(any())).thenReturn(mockRefreshToken);
+        when(refreshTokenService.create(any(), any(), any(), any())).thenReturn(mockRefreshToken);
 
-        var response = authenticationService.login(new LoginRequest("test@mail.com", "password"));
+        var response = authenticationService.login(new LoginRequest("test@mail.com", "password", "a"));
 
         assertNotNull(response);
         assertEquals("access-token", response.accessToken());
@@ -65,6 +65,6 @@ class AuthenticationServiceTest {
         UserAccount user = new UserAccount(UUID.randomUUID(), "test@mail.com", "encoded", null);
         when(userRepository.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "encoded")).thenReturn(false);
-        assertThrows(RuntimeException.class, () -> authenticationService.login(new LoginRequest("test@mail.com", "wrong")));
+        assertThrows(RuntimeException.class, () -> authenticationService.login(new LoginRequest("test@mail.com", "wrong", "a")));
     }
 }

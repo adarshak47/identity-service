@@ -1,5 +1,6 @@
 package com.adarsh.identity_service.common;
 
+import com.adarsh.identity_service.auth.exception.AccountLockedException;
 import com.adarsh.identity_service.auth.exception.EmailAlreadyExistsException;
 
 import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
@@ -58,5 +59,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleRateLimit(RateLimitExceededException ex) {
         ErrorResponse error = new ErrorResponse("RATE_LIMIT_EXCEEDED", ex.getMessage());
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(ApiResponse.failure(error));
+    }
+
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccountLocked(AccountLockedException ex) {
+        return ResponseEntity.status(HttpStatus.LOCKED)
+            .body(ApiResponse.failure(
+                new ErrorResponse("ACCOUNT_LOCKED", ex.getMessage())
+            ));
     }
 }
