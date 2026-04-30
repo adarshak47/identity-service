@@ -1,11 +1,9 @@
 CREATE TABLE refresh_tokens (
     id UUID PRIMARY KEY,
-    token VARCHAR(255) UNIQUE NOT NULL,
+    token_hash VARCHAR(255) UNIQUE NOT NULL,
     user_id UUID NOT NULL,
     expiry_date TIMESTAMP NOT NULL,
     revoked BOOLEAN NOT NULL,
     created_at TIMESTAMP NOT NULL,
-    CONSTRAINT fk_refresh_user
-        FOREIGN KEY(user_id)
-        REFERENCES users(id)
+    CONSTRAINT fk_refresh_user FOREIGN KEY(user_id) REFERENCES users(id)
 );

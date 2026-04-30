@@ -1,54 +1,60 @@
 package com.adarsh.identity_service.auth.domain;
 
 import jakarta.persistence.*;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Getter
 @Entity
-@Table(name="refresh_tokens")
+@Table(name = "refresh_tokens")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class RefreshToken {
 
     @Id
     private UUID id;
 
-    @Column(nullable=false, unique=true)
-    private String token;
+    @Column(name = "token_hash", nullable = false, unique = true)
+    private String tokenHash;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name="user_id", nullable=false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id")
     private UserAccount user;
 
-    @Column(name="expiry_date", nullable=false)
+    @Column(name = "expiry_date", nullable = false)
     private LocalDateTime expiryDate;
 
-    @Column(nullable=false)
+    @Column(nullable = false)
     private boolean revoked;
 
-    @CreationTimestamp
-    @Column(name="created_at")
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    public RefreshToken(UUID id, String token, UserAccount user, LocalDateTime expiryDate, boolean revoked){
-        this.id=id;
-        this.token=token;
-        this.user=user;
-        this.expiryDate=expiryDate;
-        this.revoked=revoked;
+    @Transient
+    private String rawToken;
+
+    public RefreshToken(UUID id, String tokenHash, UserAccount user, LocalDateTime expiryDate, boolean revoked) {
+        this.id = id;
+        this.tokenHash = tokenHash;
+        this.user = user;
+        this.expiryDate = expiryDate;
+        this.revoked = revoked;
+        this.createdAt = LocalDateTime.now();
     }
 
-    public void revoke(){
-        this.revoked=true;
+    public void revoke() {
+        this.revoked = true;
     }
 
-    public boolean isExpired(){
+    public boolean isExpired() {
         return expiryDate.isBefore(LocalDateTime.now());
+    }
+
+    public void setRawToken(String rawToken) {
+        this.rawToken = rawToken;
     }
 }
