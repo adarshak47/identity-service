@@ -1,10 +1,7 @@
 package com.adarsh.identity_service.common;
 
-import com.adarsh.identity_service.auth.exception.AccountLockedException;
-import com.adarsh.identity_service.auth.exception.EmailAlreadyExistsException;
+import com.adarsh.identity_service.auth.exception.*;
 
-import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
-import com.adarsh.identity_service.auth.exception.RateLimitExceededException;
 import com.adarsh.identity_service.common.response.ApiResponse;
 import com.adarsh.identity_service.common.response.ErrorResponse;
 import com.adarsh.identity_service.common.response.FieldError;
@@ -67,5 +64,11 @@ public class GlobalExceptionHandler {
             .body(ApiResponse.failure(
                 new ErrorResponse("ACCOUNT_LOCKED", ex.getMessage())
             ));
+    }
+
+    @ExceptionHandler(UserNotActiveException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUserNotActive(UserNotActiveException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN) // 403 Forbidden
+            .body(ApiResponse.failure(new ErrorResponse("USER_NOT_ACTIVE", ex.getMessage())));
     }
 }

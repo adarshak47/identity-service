@@ -80,4 +80,8 @@ public class UserAccount {
         return this.lockedUntil != null &&
             this.lockedUntil.isAfter(LocalDateTime.now());
     }
+
+    public void setStatusToInactive() { this.status = UserStatus.INACTIVE; }
+    public void setStatusToActive() { this.status = UserStatus.ACTIVE; }
+    public boolean isActive() { return this.status == UserStatus.ACTIVE; }
 }

@@ -4,10 +4,7 @@ package com.adarsh.identity_service.auth.service;
 
 import com.adarsh.identity_service.auth.domain.*;
 import com.adarsh.identity_service.auth.dto.*;
-import com.adarsh.identity_service.auth.exception.AccountLockedException;
-import com.adarsh.identity_service.auth.exception.EmailAlreadyExistsException;
-import com.adarsh.identity_service.auth.exception.InvalidCredentialsException;
-import com.adarsh.identity_service.auth.exception.RateLimitExceededException;
+import com.adarsh.identity_service.auth.exception.*;
 import com.adarsh.identity_service.auth.repository.RefreshTokenRepository;
 import com.adarsh.identity_service.auth.repository.RoleRepository;
 import com.adarsh.identity_service.auth.repository.UserAccountRepository;
@@ -37,6 +34,7 @@ public class AuthenticationService {
     private final RoleRepository roleRepository;
     private final RequestContext requestContext;
     private final RateLimiterService rateLimiterService;
+    private final EmailVerificationService emailVerificationService;
 
     public RegisterResponse registerUser(RegisterRequest request) {
 
@@ -44,11 +42,13 @@ public class AuthenticationService {
         if(repository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException(email);
         }
-        UserAccount user = new UserAccount(UUID.randomUUID(), email, passwordEncoder.encode(request.password()), UserStatus.ACTIVE);
+
+        UserAccount user = new UserAccount(UUID.randomUUID(), email, passwordEncoder.encode(request.password()), UserStatus.INACTIVE);
         Role userRole = roleRepository.findByName("USER").orElseThrow();
 
         user.addRole(userRole);
         UserAccount savedUser = repository.save(user);
+        emailVerificationService.sendVerificationEmail(user);
         return new RegisterResponse(savedUser.getId(), savedUser.getEmail(), "User registered successfully");
     }
 
@@ -68,6 +68,10 @@ public class AuthenticationService {
         // 🔐 CHECK ACCOUNT LOCK
         if (user.isAccountLocked()) {
             throw new AccountLockedException();
+        }
+
+        if (!user.isActive()) {
+            throw new UserNotActiveException(user.getEmail());
         }
 
         // ❌ WRONG PASSWORD
