@@ -14,6 +14,22 @@ spring:
                             - email
                             - profile
 
+    mail:
+        host: smtp.gmail.com
+        port: 587
+        username: ${MAIL_ID}
+        password: ${MAIL_PASSWORD}
+        properties:
+            mail:
+                smtp:
+                    auth: true
+                    starttls:
+                        enable: true
+app:
+    verification:
+        token-validity-minutes: 60  # 1 hour
+    backend-base-url: http://localhost:8080
+
 server:
     port: ${PORT:8080}
 
