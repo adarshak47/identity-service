@@ -24,24 +24,14 @@ public class RefreshTokenService {
     @Value("${security.jwt.refresh-token-expiration}")
     private long refreshTokenExpiration;
 
-    public RefreshToken create(UserAccount user,
-                               String deviceName,
-                               String ipAddress,
-                               String userAgent) {
+    public RefreshToken create(UserAccount user, String deviceName, String ipAddress, String userAgent) {
 
         String rawToken = generateSecureToken();
         String tokenHash = TokenHashUtil.hash(rawToken);
 
-        RefreshToken token = new RefreshToken(
-            UUID.randomUUID(),
-            tokenHash,
-            user,
-            LocalDateTime.now().plusSeconds(refreshTokenExpiration),
-            false,
-            deviceName,
-            ipAddress,
-            userAgent
-        );
+        UUID familyId = UUID.randomUUID();
+
+        RefreshToken token = new RefreshToken(UUID.randomUUID(), tokenHash, familyId, user, LocalDateTime.now().plusSeconds(refreshTokenExpiration), false, deviceName, ipAddress, userAgent);
 
         repository.save(token);
         token.setRawToken(rawToken);
