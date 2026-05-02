@@ -1,7 +1,7 @@
 package com.adarsh.identity_service.auth.service;
 
 
-
+import com.adarsh.identity_service.audit.service.AuditLogService;
 import com.adarsh.identity_service.auth.domain.*;
 import com.adarsh.identity_service.auth.dto.*;
 import com.adarsh.identity_service.auth.exception.*;
@@ -35,11 +35,12 @@ public class AuthenticationService {
     private final RequestContext requestContext;
     private final RateLimiterService rateLimiterService;
     private final EmailVerificationService emailVerificationService;
+    private final AuditLogService auditLogService;
 
     public RegisterResponse registerUser(RegisterRequest request) {
-
+        String ip = requestContext.getClientIp();
         String email = InputNormalizer.normalizeEmail(request.email());
-        if(repository.existsByEmail(email)) {
+        if (repository.existsByEmail(email)) {
             throw new EmailAlreadyExistsException(email);
         }
 
@@ -49,71 +50,93 @@ public class AuthenticationService {
         user.addRole(userRole);
         UserAccount savedUser = repository.save(user);
         emailVerificationService.sendVerificationEmail(user);
+        auditLogService.log("REGISTER", user.getEmail(), "User registered", ip);
         return new RegisterResponse(savedUser.getId(), savedUser.getEmail(), "User registered successfully");
     }
 
     public LoginResponse login(LoginRequest request) {
+        String ip = requestContext.getClientIp();
+        try {
+            String email = InputNormalizer.normalizeEmail(request.email());
 
-        String email = InputNormalizer.normalizeEmail(request.email());
+            String rateLimitKey = requestContext.getClientIp() + ":" + email;
 
-        String rateLimitKey = requestContext.getClientIp() + ":" + email;
+            if (!rateLimiterService.isAllowed(rateLimitKey)) {
+                throw new RateLimitExceededException("Too many login attempts");
+            }
 
-        if (!rateLimiterService.isAllowed(rateLimitKey)) {
-            throw new RateLimitExceededException("Too many login attempts");
-        }
+            UserAccount user = repository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
 
-        UserAccount user = repository.findByEmail(email)
-            .orElseThrow(InvalidCredentialsException::new);
+            // 🔐 CHECK ACCOUNT LOCK
+            if (user.isAccountLocked()) {
+                throw new AccountLockedException();
+            }
 
-        // 🔐 CHECK ACCOUNT LOCK
-        if (user.isAccountLocked()) {
-            throw new AccountLockedException();
-        }
+            if (!user.isActive()) {
+                throw new UserNotActiveException(user.getEmail());
+            }
 
-        if (!user.isActive()) {
-            throw new UserNotActiveException(user.getEmail());
-        }
+            // ❌ WRONG PASSWORD
+            if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
 
-        // ❌ WRONG PASSWORD
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+                user.incrementFailedAttempts(2, 1); // 5 attempts → lock 10 min
+                repository.save(user);
 
-            user.incrementFailedAttempts(2, 1); // 5 attempts → lock 10 min
+                throw new InvalidCredentialsException();
+            }
+
+            // ✅ SUCCESS
+            user.resetFailedAttempts();
             repository.save(user);
 
-            throw new InvalidCredentialsException();
+            rateLimiterService.reset(rateLimitKey);
+
+            List<String> roles = user.getRoles().stream().map(Role::getName).toList();
+
+            List<String> permissions = user.getRoles().stream().flatMap(r -> r.getPermissions().stream()).map(Permission::getName).distinct().toList();
+
+            String accessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles, permissions);
+
+            RefreshToken refreshToken = refreshTokenService.create(user, request.deviceName(), requestContext.getClientIp(), requestContext.getUserAgent());
+
+            return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
+        } catch (InvalidCredentialsException e) {
+            // Also log failed
+            auditLogService.log(
+                "LOGIN_FAIL",
+                request.email(),
+                "Login failed: invalid credentials",
+                ip
+            );
+            throw e;
+        } catch (AccountLockedException e) {
+            auditLogService.log(
+                "LOGIN_FAIL",
+                request.email(),
+                "Login failed: account locked",
+                ip
+            );
+            throw e;
+        } catch (RateLimitExceededException e) {
+            auditLogService.log(
+                "LOGIN_FAIL",
+                request.email(),
+                "Login failed: Too many login attempts.",
+                ip
+            );
+            throw e;
+        } catch (UserNotActiveException e) {
+            auditLogService.log(
+                "LOGIN_FAIL",
+                request.email(),
+                "Login failed: Email not verified",
+                ip
+            );
+            throw e;
         }
+    }
 
-        // ✅ SUCCESS
-        user.resetFailedAttempts();
-        repository.save(user);
-
-        rateLimiterService.reset(rateLimitKey);
-
-        List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-
-        List<String> permissions = user.getRoles()
-            .stream()
-            .flatMap(r -> r.getPermissions().stream())
-            .map(Permission::getName)
-            .distinct()
-            .toList();
-
-        String accessToken = jwtTokenProvider.generateToken(
-            user.getId().toString(),
-            user.getEmail(),
-            roles,
-            permissions
-        );
-
-        RefreshToken refreshToken = refreshTokenService.create(
-            user,
-            request.deviceName(),
-            requestContext.getClientIp(),
-            requestContext.getUserAgent()
-        );
-
-        return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
-    }    public LoginResponse refreshToken(RefreshRequest request) {
+    public LoginResponse refreshToken(RefreshRequest request) {
 
         String tokenHash = TokenHashUtil.hash(request.refreshToken());
         RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash).orElseThrow(InvalidCredentialsException::new);
@@ -128,25 +151,10 @@ public class AuthenticationService {
         UserAccount user = existingToken.getUser();
 
         List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-        List<String> permissions = user.getRoles()
-            .stream()
-            .flatMap(role -> role.getPermissions().stream())
-            .map(Permission::getName)
-            .distinct()
-            .toList();
+        List<String> permissions = user.getRoles().stream().flatMap(role -> role.getPermissions().stream()).map(Permission::getName).distinct().toList();
 
-        String newAccessToken = jwtTokenProvider.generateToken(
-            user.getId().toString(),
-            user.getEmail(),
-            roles,
-            permissions
-        );
-        RefreshToken newRefreshToken = refreshTokenService.create(
-            user,
-            existingToken.getDeviceName(),
-            existingToken.getIpAddress(),
-            existingToken.getUserAgent()
-        );
+        String newAccessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles, permissions);
+        RefreshToken newRefreshToken = refreshTokenService.create(user, existingToken.getDeviceName(), existingToken.getIpAddress(), existingToken.getUserAgent());
 
         return new LoginResponse(newAccessToken, newRefreshToken.getRawToken(), "Bearer");
     }
@@ -164,18 +172,9 @@ public class AuthenticationService {
 
     public List<SessionResponse> getUserSessions(String userId) {
 
-        UserAccount user = repository.findById(UUID.fromString(userId))
-            .orElseThrow(() -> new InvalidCredentialsException());
+        UserAccount user = repository.findById(UUID.fromString(userId)).orElseThrow(() -> new InvalidCredentialsException());
 
-        return refreshTokenRepository.findByUser(user)
-            .stream()
-            .map(token -> new SessionResponse(
-                token.getDeviceName(),
-                token.getIpAddress(),
-                token.getUserAgent(),
-                token.isRevoked()
-            ))
-            .toList();
+        return refreshTokenRepository.findByUser(user).stream().map(token -> new SessionResponse(token.getDeviceName(), token.getIpAddress(), token.getUserAgent(), token.isRevoked())).toList();
     }
 
 }

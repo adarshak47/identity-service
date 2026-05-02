@@ -1,9 +1,11 @@
 package com.adarsh.identity_service.auth.service;
 
+import com.adarsh.identity_service.audit.service.AuditLogService;
 import com.adarsh.identity_service.auth.domain.UserAccount;
 import com.adarsh.identity_service.auth.domain.EmailVerificationToken;
 import com.adarsh.identity_service.auth.repository.EmailVerificationTokenRepository;
 import com.adarsh.identity_service.auth.repository.UserAccountRepository;
+import com.adarsh.identity_service.common.web.RequestContext;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,6 +23,8 @@ public class EmailVerificationService {
     private final EmailVerificationTokenRepository tokenRepository;
     private final UserAccountRepository userRepository;
     private final JavaMailSender mailSender;
+    private final AuditLogService auditLogService;
+    private final RequestContext requestContext;
 
     @Value("${app.backend-base-url}")
     private String backendBaseUrl;
@@ -51,6 +55,7 @@ public class EmailVerificationService {
 
     @Transactional
     public void verify(String token) {
+        String ip = requestContext.getClientIp();
         EmailVerificationToken ver = tokenRepository.findByToken(token)
             .orElseThrow(() -> new RuntimeException("Invalid verification token."));
         if (ver.isExpired()) throw new RuntimeException("Token expired.");
@@ -59,5 +64,6 @@ public class EmailVerificationService {
         ver.getUser().setStatusToActive();
         tokenRepository.save(ver);
         userRepository.save(ver.getUser());
+        auditLogService.log("EMAIL_VERIFY", ver.getUser().getEmail(), "Email verified", ip);
     }
 }
