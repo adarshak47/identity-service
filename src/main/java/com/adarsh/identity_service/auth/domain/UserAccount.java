@@ -52,6 +52,13 @@ public class UserAccount {
     @Column(name = "locked_until")
     private LocalDateTime lockedUntil;
 
+    @Column(name = "mfa_enabled")
+    private boolean mfaEnabled;
+
+    @Column(name = "mfa_type")
+    @Enumerated(EnumType.STRING)
+    private MfaType mfaType = MfaType.NONE;
+
     public UserAccount(UUID id, String email, String passwordHash, UserStatus status){
         this.id=id;
         this.email=email;

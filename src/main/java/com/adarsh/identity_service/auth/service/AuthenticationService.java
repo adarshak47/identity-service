@@ -44,6 +44,7 @@ public class AuthenticationService {
     private final JwtBlacklistService jwtBlacklistService;
     private final AuthMetrics authMetrics;
     private final Tracer tracer;
+    private final MfaService mfaService;
 
     public RegisterResponse registerUser(RegisterRequest request) {
         String ip = requestContext.getClientIp();
@@ -81,8 +82,7 @@ public class AuthenticationService {
                     throw new RateLimitExceededException();
                 }
 
-                UserAccount user = repository.findByEmail(email)
-                    .orElseThrow(InvalidCredentialsException::new);
+                UserAccount user = repository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
 
                 if (user.isAccountLocked()) {
                     span.tag("login.status", "locked");
@@ -113,29 +113,23 @@ public class AuthenticationService {
                 span.tag("login.status", "success");
                 span.tag("user.email", email);
 
-                List<String> roles = user.getRoles().stream().map(Role::getName).toList();
+                // CHECK MFA
+                if (user.isMfaEnabled()) {
 
-                List<String> permissions = user.getRoles().stream()
-                    .flatMap(r -> r.getPermissions().stream())
-                    .map(Permission::getName)
-                    .distinct()
-                    .toList();
+                    String otp = mfaService.generateOtp(user);
 
-                String accessToken = jwtTokenProvider.generateToken(
-                    user.getId().toString(),
-                    user.getEmail(),
-                    roles,
-                    permissions
-                );
+                    return new LoginResponse(null, null, "MFA_REQUIRED");
+                } else {
+                    List<String> roles = user.getRoles().stream().map(Role::getName).toList();
 
-                RefreshToken refreshToken = refreshTokenService.create(
-                    user,
-                    request.deviceName(),
-                    requestContext.getClientIp(),
-                    requestContext.getUserAgent()
-                );
+                    List<String> permissions = user.getRoles().stream().flatMap(r -> r.getPermissions().stream()).map(Permission::getName).distinct().toList();
 
-                return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
+                    String accessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles, permissions);
+
+                    RefreshToken refreshToken = refreshTokenService.create(user, request.deviceName(), requestContext.getClientIp(), requestContext.getUserAgent());
+
+                    return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
+                }
 
             } catch (Exception e) {
 
@@ -149,6 +143,7 @@ public class AuthenticationService {
             span.end();   // 🔥 VERY IMPORTANT
         }
     }
+
     public LoginResponse refreshToken(RefreshRequest request) {
 
         String tokenHash = TokenHashUtil.hash(request.refreshToken());
@@ -202,11 +197,7 @@ public class AuthenticationService {
     public void logout(LogoutRequest request, String accessToken) {
 
         // 🔥 Extract JTI
-        Claims claims = Jwts.parserBuilder()
-            .setSigningKey(jwtTokenProvider.getSecretKey())
-            .build()
-            .parseClaimsJws(accessToken)
-            .getBody();
+        Claims claims = Jwts.parserBuilder().setSigningKey(jwtTokenProvider.getSecretKey()).build().parseClaimsJws(accessToken).getBody();
 
         String jti = claims.getId();
         long expiry = claims.getExpiration().getTime();
@@ -230,6 +221,34 @@ public class AuthenticationService {
         UserAccount user = repository.findById(UUID.fromString(userId)).orElseThrow(() -> new InvalidCredentialsException());
 
         return refreshTokenRepository.findByUser(user).stream().map(token -> new SessionResponse(token.getDeviceName(), token.getIpAddress(), token.getUserAgent(), token.isRevoked())).toList();
+    }
+
+    public LoginResponse verifyMfa(MfaRequest request) {
+
+        String email = InputNormalizer.normalizeEmail(request.email());
+
+        UserAccount user = repository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
+
+        // 1. Check OTP
+        boolean valid = mfaService.verifyOtp(user, request.otp());
+
+        if (!valid) {
+            auditLogService.log("MFA_FAIL", email, "Invalid MFA OTP", requestContext.getClientIp());
+            throw new InvalidCredentialsException();
+        }
+
+        // 2. OTP success → generate tokens
+        List<String> roles = user.getRoles().stream().map(Role::getName).toList();
+
+        List<String> permissions = user.getRoles().stream().flatMap(r -> r.getPermissions().stream()).map(Permission::getName).distinct().toList();
+
+        String accessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles, permissions);
+
+        RefreshToken refreshToken = refreshTokenService.create(user, "MFA_LOGIN", requestContext.getClientIp(), requestContext.getUserAgent());
+
+        auditLogService.log("MFA_SUCCESS", email, "MFA verification successful", requestContext.getClientIp());
+
+        return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
     }
 
 }
