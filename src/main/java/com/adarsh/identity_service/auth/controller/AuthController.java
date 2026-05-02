@@ -23,12 +23,13 @@ public class AuthController {
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
-        log.info("Register request: {}", request);
+        log.info("Register request received for email={}", request.email());
         return ApiResponse.success(authenticationService.registerUser(request));
     }
 
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        log.info("Login attempt for email={}", request.email());
         return ApiResponse.success(authenticationService.login(request));
     }
 
@@ -39,7 +40,8 @@ public class AuthController {
 
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void logout(@Valid @RequestBody LogoutRequest request){
-        authenticationService.logout(request);
+    public void logout(@Valid @RequestBody LogoutRequest request, @RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.substring(7);
+        authenticationService.logout(request, token);
     }
 }

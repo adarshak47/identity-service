@@ -3,6 +3,32 @@ spring:
         name: identity-service
     profiles:
         active: dev
+    security:
+        oauth2:
+            client:
+                registration:
+                    google:
+                        client-id: ${GOOGLE_CLIENT_ID}
+                        client-secret: ${GOOGLE_CLIENT_SECRET}
+                        scope:
+                            - email
+                            - profile
+
+    mail:
+        host: smtp.gmail.com
+        port: 587
+        username: ${MAIL_ID}
+        password: ${MAIL_PASSWORD}
+        properties:
+            mail:
+                smtp:
+                    auth: true
+                    starttls:
+                        enable: true
+app:
+    verification:
+        token-validity-minutes: 60  # 1 hour
+    backend-base-url: http://localhost:8080
 
 server:
     port: ${PORT:8080}
@@ -17,3 +43,37 @@ security:
 logging:
     pattern:
         console: "%d{yyyy-MM-dd HH:mm:ss} [%X{correlationId}] %-5level %logger{36} - %msg%n"
+
+management:
+    tracing:
+        sampling:
+            probability: 1.0   # capture all requests (dev)
+    otlp:
+        tracing:
+            endpoint: http://localhost:4317  # later for collector
+    endpoints:
+        web:
+            exposure:
+                include: health,info,metrics,prometheus
+    endpoint:
+        health:
+            probes:
+                enabled: true
+            show-details: when_authorized
+        prometheus:
+            enabled: true
+    info:
+        env:
+            enabled: true
+
+    metrics:
+        tags:
+            application: identity-service
+
+
+
+info:
+    app:
+        name: identity-service
+        description: Identity & Authentication Service
+        version: 1.0.0

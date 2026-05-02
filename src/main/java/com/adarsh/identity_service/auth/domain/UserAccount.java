@@ -46,6 +46,19 @@ public class UserAccount {
     )
     private Set<Role> roles = new HashSet<>();
 
+    @Column(name = "failed_attempts")
+    private int failedAttempts;
+
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
+    @Column(name = "mfa_enabled")
+    private boolean mfaEnabled;
+
+    @Column(name = "mfa_type")
+    @Enumerated(EnumType.STRING)
+    private MfaType mfaType = MfaType.NONE;
+
     public UserAccount(UUID id, String email, String passwordHash, UserStatus status){
         this.id=id;
         this.email=email;
@@ -56,4 +69,26 @@ public class UserAccount {
     public void addRole(Role role){
         this.roles.add(role);
     }
+
+    public void incrementFailedAttempts(int maxAttempts, int lockMinutes) {
+        this.failedAttempts++;
+
+        if (this.failedAttempts >= maxAttempts) {
+            this.lockedUntil = LocalDateTime.now().plusMinutes(lockMinutes);
+        }
+    }
+
+    public void resetFailedAttempts() {
+        this.failedAttempts = 0;
+        this.lockedUntil = null;
+    }
+
+    public boolean isAccountLocked() {
+        return this.lockedUntil != null &&
+            this.lockedUntil.isAfter(LocalDateTime.now());
+    }
+
+    public void setStatusToInactive() { this.status = UserStatus.INACTIVE; }
+    public void setStatusToActive() { this.status = UserStatus.ACTIVE; }
+    public boolean isActive() { return this.status == UserStatus.ACTIVE; }
 }
