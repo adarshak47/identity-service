@@ -13,6 +13,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 @Configuration
 @EnableMethodSecurity
@@ -23,6 +24,8 @@ public class SecurityConfig {
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
 
+    private final CorsConfigurationSource corsConfigurationSource;
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -31,45 +34,26 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
-        return http
-            .csrf(csrf -> csrf.disable())
+        return http.csrf(csrf -> csrf.disable())
 
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
+            .cors(cors -> cors.configurationSource(corsConfigurationSource))
 
-            .exceptionHandling(ex -> ex
-                .authenticationEntryPoint(
-                    (request, response, e) ->
-                        response.sendError(
-                            HttpServletResponse.SC_UNAUTHORIZED,
-                            "Unauthorized"
-                        )
-                )
-            )
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+            .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, e) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized")))
 
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                    "/api/v1/auth/**",
-                    "/oauth2/**",
-                    "/login/**"
-                ).permitAll()
 
-                .anyRequest().authenticated()
-            )
+                .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
 
-            // 🔥 OAuth2 CONFIG (FULL)
-            .oauth2Login(oauth -> oauth
-                .userInfoEndpoint(user ->
-                    user.userService(customOAuth2UserService)
-                )
-                .successHandler(oAuth2SuccessHandler)
-            )
+                .requestMatchers("/api/v1/auth/**", "/oauth2/**", "/login/**").permitAll()
 
-            .addFilterBefore(
-                jwtFilter,
-                UsernamePasswordAuthenticationFilter.class
-            )
+                .anyRequest().authenticated())
+
+
+            .oauth2Login(oauth -> oauth.userInfoEndpoint(user -> user.userService(customOAuth2UserService)).successHandler(oAuth2SuccessHandler))
+
+            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
 
             .build();
     }
