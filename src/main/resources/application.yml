@@ -43,3 +43,23 @@ security:
 logging:
     pattern:
         console: "%d{yyyy-MM-dd HH:mm:ss} [%X{correlationId}] %-5level %logger{36} - %msg%n"
+
+management:
+    endpoints:
+        web:
+            exposure:
+                include: health,info,metrics,prometheus
+    endpoint:
+        health:
+            probes:
+                enabled: true
+            show-details: when_authorized
+    info:
+        env:
+            enabled: true
+
+info:
+    app:
+        name: identity-service
+        description: Identity & Authentication Service
+        version: 1.0.0

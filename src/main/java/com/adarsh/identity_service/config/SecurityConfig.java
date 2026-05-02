@@ -44,9 +44,14 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
 
+                // CORS preflight
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
 
-                .requestMatchers("/api/v1/auth/**", "/oauth2/**", "/login/**").permitAll()
+                // Public endpoints
+                .requestMatchers("/api/v1/auth/**", "/oauth2/**", "/login/**", "/actuator/health").permitAll()
+
+                // 🔐 Actuator protected
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
 
                 .anyRequest().authenticated())
 
