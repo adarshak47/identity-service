@@ -92,4 +92,8 @@ public class RefreshToken {
     public UUID getFamilyId() {
         return familyId;
     }
+
+    public void setRevoked(boolean revoked) {
+        this.revoked = revoked;
+    }
 }
