@@ -24,6 +24,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
 
+    private final JwtBlacklistService blacklistService;
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 
@@ -37,6 +39,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 Claims claims = Jwts.parserBuilder().setSigningKey(tokenProvider.getSecretKey()).build().parseClaimsJws(token).getBody();
 
+                String jti = claims.getId(); // 🔥 NEW
+
+                // 🚨 BLOCK if blacklisted
+                if (blacklistService.isBlacklisted(jti)) {
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token revoked");
+                    return;
+                }
+
                 String userId = claims.getSubject();
 
                 List<String> roles = claims.get("roles", List.class);
@@ -44,12 +54,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 List<SimpleGrantedAuthority> authorities = new ArrayList<>();
 
-                // Roles
                 if (roles != null) {
                     roles.forEach(role -> authorities.add(new SimpleGrantedAuthority("ROLE_" + role)));
                 }
 
-                // Permissions
                 if (permissions != null) {
                     permissions.forEach(permission -> authorities.add(new SimpleGrantedAuthority(permission)));
                 }
