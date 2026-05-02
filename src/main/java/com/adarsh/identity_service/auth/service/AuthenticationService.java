@@ -11,9 +11,12 @@ import com.adarsh.identity_service.auth.repository.UserAccountRepository;
 import com.adarsh.identity_service.common.security.TokenHashUtil;
 import com.adarsh.identity_service.common.util.InputNormalizer;
 import com.adarsh.identity_service.common.web.RequestContext;
+import com.adarsh.identity_service.security.jwt.JwtBlacklistService;
 import com.adarsh.identity_service.security.jwt.JwtTokenProvider;
 import com.adarsh.identity_service.security.ratelimit.RateLimiterService;
 import com.adarsh.identity_service.user.dto.SessionResponse;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,6 +39,7 @@ public class AuthenticationService {
     private final RateLimiterService rateLimiterService;
     private final EmailVerificationService emailVerificationService;
     private final AuditLogService auditLogService;
+    private final JwtBlacklistService jwtBlacklistService;
 
     public RegisterResponse registerUser(RegisterRequest request) {
         String ip = requestContext.getClientIp();
@@ -166,7 +170,22 @@ public class AuthenticationService {
         return new LoginResponse(newAccessToken, newRefreshToken.getRawToken(), "Bearer");
     }
 
-    public void logout(LogoutRequest request) {
+    public void logout(LogoutRequest request, String accessToken) {
+
+        // 🔥 Extract JTI
+        Claims claims = Jwts.parserBuilder()
+            .setSigningKey(jwtTokenProvider.getSecretKey())
+            .build()
+            .parseClaimsJws(accessToken)
+            .getBody();
+
+        String jti = claims.getId();
+        long expiry = claims.getExpiration().getTime();
+
+        // 🔥 Blacklist access token
+        jwtBlacklistService.blacklist(jti, expiry);
+
+        // 🔁 Existing refresh token revoke
         String tokenHash = TokenHashUtil.hash(request.refreshToken());
 
         refreshTokenRepository.findByTokenHash(tokenHash).ifPresent(token -> {

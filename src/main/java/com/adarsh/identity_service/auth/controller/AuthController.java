@@ -40,7 +40,8 @@ public class AuthController {
 
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void logout(@Valid @RequestBody LogoutRequest request){
-        authenticationService.logout(request);
+    public void logout(@Valid @RequestBody LogoutRequest request, @RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.substring(7);
+        authenticationService.logout(request, token);
     }
 }
