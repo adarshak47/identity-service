@@ -53,6 +53,8 @@ public class SecurityConfig {
                 // 🔐 Actuator protected
                 .requestMatchers("/actuator/**").hasRole("ADMIN")
 
+                .requestMatchers("/actuator/prometheus").hasRole("ADMIN")
+
                 .anyRequest().authenticated())
 
 

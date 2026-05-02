@@ -11,6 +11,7 @@ import com.adarsh.identity_service.auth.repository.UserAccountRepository;
 import com.adarsh.identity_service.common.security.TokenHashUtil;
 import com.adarsh.identity_service.common.util.InputNormalizer;
 import com.adarsh.identity_service.common.web.RequestContext;
+import com.adarsh.identity_service.metrics.AuthMetrics;
 import com.adarsh.identity_service.security.jwt.JwtBlacklistService;
 import com.adarsh.identity_service.security.jwt.JwtTokenProvider;
 import com.adarsh.identity_service.security.ratelimit.RateLimiterService;
@@ -40,6 +41,7 @@ public class AuthenticationService {
     private final EmailVerificationService emailVerificationService;
     private final AuditLogService auditLogService;
     private final JwtBlacklistService jwtBlacklistService;
+    private final AuthMetrics authMetrics;
 
     public RegisterResponse registerUser(RegisterRequest request) {
         String ip = requestContext.getClientIp();
@@ -54,6 +56,7 @@ public class AuthenticationService {
         user.addRole(userRole);
         UserAccount savedUser = repository.save(user);
         emailVerificationService.sendVerificationEmail(user);
+        authMetrics.incrementRegistration();
         auditLogService.log("REGISTER", user.getEmail(), "User registered", ip);
         return new RegisterResponse(savedUser.getId(), savedUser.getEmail(), "User registered successfully");
     }
@@ -94,6 +97,7 @@ public class AuthenticationService {
             repository.save(user);
 
             rateLimiterService.reset(rateLimitKey);
+            authMetrics.incrementLoginSuccess();
 
             List<String> roles = user.getRoles().stream().map(Role::getName).toList();
 
@@ -106,15 +110,19 @@ public class AuthenticationService {
             return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
         } catch (InvalidCredentialsException e) {
             // Also log failed
+            authMetrics.incrementLoginFailure();
             auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: invalid credentials", ip);
             throw e;
         } catch (AccountLockedException e) {
+            authMetrics.incrementLoginFailure();
             auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: account locked", ip);
             throw e;
         } catch (RateLimitExceededException e) {
+            authMetrics.incrementLoginFailure();
             auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: Too many login attempts.", ip);
             throw e;
         } catch (UserNotActiveException e) {
+            authMetrics.incrementLoginFailure();
             auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: Email not verified", ip);
             throw e;
         }

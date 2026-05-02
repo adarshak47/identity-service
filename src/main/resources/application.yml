@@ -54,9 +54,15 @@ management:
             probes:
                 enabled: true
             show-details: when_authorized
+        prometheus:
+            enabled: true
     info:
         env:
             enabled: true
+
+    metrics:
+        tags:
+            application: identity-service
 
 info:
     app:
