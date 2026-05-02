@@ -3,6 +3,7 @@ package com.adarsh.identity_service.auth.service;
 import com.adarsh.identity_service.audit.service.AuditLogService;
 import com.adarsh.identity_service.auth.domain.UserAccount;
 import com.adarsh.identity_service.auth.domain.EmailVerificationToken;
+import com.adarsh.identity_service.auth.exception.InvalidVerificationTokenException;
 import com.adarsh.identity_service.auth.repository.EmailVerificationTokenRepository;
 import com.adarsh.identity_service.auth.repository.UserAccountRepository;
 import com.adarsh.identity_service.common.web.RequestContext;
@@ -57,9 +58,9 @@ public class EmailVerificationService {
     public void verify(String token) {
         String ip = requestContext.getClientIp();
         EmailVerificationToken ver = tokenRepository.findByToken(token)
-            .orElseThrow(() -> new RuntimeException("Invalid verification token."));
-        if (ver.isExpired()) throw new RuntimeException("Token expired.");
-        if (ver.isVerified()) throw new RuntimeException("Already verified.");
+            .orElseThrow(() -> new InvalidVerificationTokenException("Invalid verification token."));
+        if (ver.isExpired()) throw new InvalidVerificationTokenException("Invalid verification token.");
+        if (ver.isVerified()) throw new InvalidVerificationTokenException("Invalid verification token.");
         ver.markVerified();
         ver.getUser().setStatusToActive();
         tokenRepository.save(ver);

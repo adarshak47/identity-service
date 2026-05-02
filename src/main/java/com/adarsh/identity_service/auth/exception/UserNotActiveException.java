@@ -1,7 +1,11 @@
 package com.adarsh.identity_service.auth.exception;
 
-public class UserNotActiveException extends RuntimeException {
+import com.adarsh.identity_service.common.exception.BaseException;
+import org.springframework.http.HttpStatus;
+
+public class UserNotActiveException extends BaseException {
+
     public UserNotActiveException(String email) {
-        super("Email not verified for user: " + email);
+        super("USER_NOT_ACTIVE", "Email not verified for user: " + email, HttpStatus.FORBIDDEN);
     }
 }

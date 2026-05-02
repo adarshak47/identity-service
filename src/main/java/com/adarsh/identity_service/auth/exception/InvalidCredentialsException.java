@@ -1,8 +1,11 @@
 package com.adarsh.identity_service.auth.exception;
 
-public class InvalidCredentialsException extends RuntimeException {
+import com.adarsh.identity_service.common.exception.BaseException;
+import org.springframework.http.HttpStatus;
+
+public class InvalidCredentialsException extends BaseException {
 
     public InvalidCredentialsException() {
-        super("Invalid credentials");
+        super("INVALID_CREDENTIALS", "Invalid credentials", HttpStatus.UNAUTHORIZED);
     }
 }
