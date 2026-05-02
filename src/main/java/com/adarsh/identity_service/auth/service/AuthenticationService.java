@@ -102,36 +102,16 @@ public class AuthenticationService {
             return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
         } catch (InvalidCredentialsException e) {
             // Also log failed
-            auditLogService.log(
-                "LOGIN_FAIL",
-                request.email(),
-                "Login failed: invalid credentials",
-                ip
-            );
+            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: invalid credentials", ip);
             throw e;
         } catch (AccountLockedException e) {
-            auditLogService.log(
-                "LOGIN_FAIL",
-                request.email(),
-                "Login failed: account locked",
-                ip
-            );
+            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: account locked", ip);
             throw e;
         } catch (RateLimitExceededException e) {
-            auditLogService.log(
-                "LOGIN_FAIL",
-                request.email(),
-                "Login failed: Too many login attempts.",
-                ip
-            );
+            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: Too many login attempts.", ip);
             throw e;
         } catch (UserNotActiveException e) {
-            auditLogService.log(
-                "LOGIN_FAIL",
-                request.email(),
-                "Login failed: Email not verified",
-                ip
-            );
+            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: Email not verified", ip);
             throw e;
         }
     }
@@ -139,22 +119,49 @@ public class AuthenticationService {
     public LoginResponse refreshToken(RefreshRequest request) {
 
         String tokenHash = TokenHashUtil.hash(request.refreshToken());
+
         RefreshToken existingToken = refreshTokenRepository.findByTokenHash(tokenHash).orElseThrow(InvalidCredentialsException::new);
+
+        // ❌ If token is invalid or expired
         if (existingToken.isRevoked() || existingToken.isExpired()) {
             throw new InvalidCredentialsException();
         }
 
-        existingToken.revoke();
+        UUID familyId = existingToken.getFamilyId();
 
-        refreshTokenRepository.save(existingToken);
+        // 🚨 STEP 1: Detect reuse (VERY IMPORTANT)
+        boolean reusedTokenExists = refreshTokenRepository.findByFamilyIdAndRevokedFalse(familyId).stream().anyMatch(t -> !t.getTokenHash().equals(tokenHash));
+
+        if (reusedTokenExists) {
+
+            // 🚨 SECURITY BREACH: revoke entire family
+            refreshTokenRepository.findByFamilyId(familyId).forEach(token -> {
+                token.revoke();
+                token.markReuseDetected();
+            });
+
+            refreshTokenRepository.flush();
+
+            throw new RuntimeException("Refresh token reuse detected. Session revoked.");
+        }
+
+        // 🔁 STEP 2: ROTATE TOKEN
+        existingToken.revoke();
 
         UserAccount user = existingToken.getUser();
 
         List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-        List<String> permissions = user.getRoles().stream().flatMap(role -> role.getPermissions().stream()).map(Permission::getName).distinct().toList();
+
+        List<String> permissions = user.getRoles().stream().flatMap(r -> r.getPermissions().stream()).map(Permission::getName).distinct().toList();
 
         String newAccessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles, permissions);
+
         RefreshToken newRefreshToken = refreshTokenService.create(user, existingToken.getDeviceName(), existingToken.getIpAddress(), existingToken.getUserAgent());
+
+        // 🔗 Link rotation chain
+        existingToken.setReplacedBy(newRefreshToken.getId());
+
+        refreshTokenRepository.save(existingToken);
 
         return new LoginResponse(newAccessToken, newRefreshToken.getRawToken(), "Bearer");
     }
