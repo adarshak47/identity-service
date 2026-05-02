@@ -1,12 +1,11 @@
 package com.adarsh.identity_service.auth.exception;
 
-public class RateLimitExceededException extends RuntimeException {
+import com.adarsh.identity_service.common.exception.BaseException;
+import org.springframework.http.HttpStatus;
 
-    public RateLimitExceededException(String message) {
-        super(message);
-    }
+public class RateLimitExceededException extends BaseException {
 
     public RateLimitExceededException() {
-        super("Too many requests. Please try again later.");
+        super("RATE_LIMIT_EXCEEDED", "Too many requests. Please try again later.", HttpStatus.TOO_MANY_REQUESTS);
     }
 }

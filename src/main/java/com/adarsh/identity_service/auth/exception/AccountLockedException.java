@@ -1,8 +1,11 @@
 package com.adarsh.identity_service.auth.exception;
 
-public class AccountLockedException extends RuntimeException {
+import com.adarsh.identity_service.common.exception.BaseException;
+import org.springframework.http.HttpStatus;
+
+public class AccountLockedException extends BaseException {
 
     public AccountLockedException() {
-        super("Account is temporarily locked due to multiple failed login attempts");
+        super("ACCOUNT_LOCKED", "Account is temporarily locked due to multiple failed login attempts", HttpStatus.LOCKED);
     }
 }

@@ -66,7 +66,7 @@ public class AuthenticationService {
             String rateLimitKey = requestContext.getClientIp() + ":" + email;
 
             if (!rateLimiterService.isAllowed(rateLimitKey)) {
-                throw new RateLimitExceededException("Too many login attempts");
+                throw new RateLimitExceededException();
             }
 
             UserAccount user = repository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
@@ -146,7 +146,7 @@ public class AuthenticationService {
 
             refreshTokenRepository.flush();
 
-            throw new RuntimeException("Refresh token reuse detected. Session revoked.");
+            throw new RefreshTokenReuseException();
         }
 
         // 🔁 STEP 2: ROTATE TOKEN
