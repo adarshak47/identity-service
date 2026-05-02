@@ -18,6 +18,7 @@ import com.adarsh.identity_service.security.ratelimit.RateLimiterService;
 import com.adarsh.identity_service.user.dto.SessionResponse;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -42,6 +43,7 @@ public class AuthenticationService {
     private final AuditLogService auditLogService;
     private final JwtBlacklistService jwtBlacklistService;
     private final AuthMetrics authMetrics;
+    private final Tracer tracer;
 
     public RegisterResponse registerUser(RegisterRequest request) {
         String ip = requestContext.getClientIp();
@@ -62,72 +64,91 @@ public class AuthenticationService {
     }
 
     public LoginResponse login(LoginRequest request) {
-        String ip = requestContext.getClientIp();
-        try {
-            String email = InputNormalizer.normalizeEmail(request.email());
 
-            String rateLimitKey = requestContext.getClientIp() + ":" + email;
+        var span = tracer.nextSpan().name("auth.login").start();
 
-            if (!rateLimiterService.isAllowed(rateLimitKey)) {
-                throw new RateLimitExceededException();
-            }
+        try (Tracer.SpanInScope ws = tracer.withSpan(span)) {
 
-            UserAccount user = repository.findByEmail(email).orElseThrow(InvalidCredentialsException::new);
+            String ip = requestContext.getClientIp();
 
-            // 🔐 CHECK ACCOUNT LOCK
-            if (user.isAccountLocked()) {
-                throw new AccountLockedException();
-            }
+            try {
+                String email = InputNormalizer.normalizeEmail(request.email());
 
-            if (!user.isActive()) {
-                throw new UserNotActiveException(user.getEmail());
-            }
+                String rateLimitKey = requestContext.getClientIp() + ":" + email;
 
-            // ❌ WRONG PASSWORD
-            if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+                if (!rateLimiterService.isAllowed(rateLimitKey)) {
+                    span.tag("login.status", "rate_limited");
+                    throw new RateLimitExceededException();
+                }
 
-                user.incrementFailedAttempts(2, 1); // 5 attempts → lock 10 min
+                UserAccount user = repository.findByEmail(email)
+                    .orElseThrow(InvalidCredentialsException::new);
+
+                if (user.isAccountLocked()) {
+                    span.tag("login.status", "locked");
+                    throw new AccountLockedException();
+                }
+
+                if (!user.isActive()) {
+                    span.tag("login.status", "inactive");
+                    throw new UserNotActiveException(user.getEmail());
+                }
+
+                if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+
+                    user.incrementFailedAttempts(2, 1);
+                    repository.save(user);
+
+                    span.tag("login.status", "bad_password");
+
+                    throw new InvalidCredentialsException();
+                }
+
+                // ✅ SUCCESS BLOCK
+                user.resetFailedAttempts();
                 repository.save(user);
 
-                throw new InvalidCredentialsException();
+                rateLimiterService.reset(rateLimitKey);
+
+                span.tag("login.status", "success");
+                span.tag("user.email", email);
+
+                List<String> roles = user.getRoles().stream().map(Role::getName).toList();
+
+                List<String> permissions = user.getRoles().stream()
+                    .flatMap(r -> r.getPermissions().stream())
+                    .map(Permission::getName)
+                    .distinct()
+                    .toList();
+
+                String accessToken = jwtTokenProvider.generateToken(
+                    user.getId().toString(),
+                    user.getEmail(),
+                    roles,
+                    permissions
+                );
+
+                RefreshToken refreshToken = refreshTokenService.create(
+                    user,
+                    request.deviceName(),
+                    requestContext.getClientIp(),
+                    requestContext.getUserAgent()
+                );
+
+                return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
+
+            } catch (Exception e) {
+
+                span.tag("login.status", "failed");
+                span.tag("error.type", e.getClass().getSimpleName());
+
+                throw e;
             }
 
-            // ✅ SUCCESS
-            user.resetFailedAttempts();
-            repository.save(user);
-
-            rateLimiterService.reset(rateLimitKey);
-            authMetrics.incrementLoginSuccess();
-
-            List<String> roles = user.getRoles().stream().map(Role::getName).toList();
-
-            List<String> permissions = user.getRoles().stream().flatMap(r -> r.getPermissions().stream()).map(Permission::getName).distinct().toList();
-
-            String accessToken = jwtTokenProvider.generateToken(user.getId().toString(), user.getEmail(), roles, permissions);
-
-            RefreshToken refreshToken = refreshTokenService.create(user, request.deviceName(), requestContext.getClientIp(), requestContext.getUserAgent());
-
-            return new LoginResponse(accessToken, refreshToken.getRawToken(), "Bearer");
-        } catch (InvalidCredentialsException e) {
-            // Also log failed
-            authMetrics.incrementLoginFailure();
-            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: invalid credentials", ip);
-            throw e;
-        } catch (AccountLockedException e) {
-            authMetrics.incrementLoginFailure();
-            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: account locked", ip);
-            throw e;
-        } catch (RateLimitExceededException e) {
-            authMetrics.incrementLoginFailure();
-            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: Too many login attempts.", ip);
-            throw e;
-        } catch (UserNotActiveException e) {
-            authMetrics.incrementLoginFailure();
-            auditLogService.log("LOGIN_FAIL", request.email(), "Login failed: Email not verified", ip);
-            throw e;
+        } finally {
+            span.end();   // 🔥 VERY IMPORTANT
         }
     }
-
     public LoginResponse refreshToken(RefreshRequest request) {
 
         String tokenHash = TokenHashUtil.hash(request.refreshToken());
